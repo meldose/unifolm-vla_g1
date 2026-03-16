@@ -1,3 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+IFS=$'\n\t'
+
+usage() {
+  cat <<'EOF'
+Usage: run_eval_libero.sh [ENV OVERRIDES]
+
+Common overrides:
+  LIBERO_HOME=/path/to/LIBERO
+  CKPT_PATH=/path/to/checkpoints/pytorch_model.pt
+  VLM_PRETRAINED_PATH=/path/to/Unifolm-VLM-Base
+  TASK_SUITE_NAME=libero_spatial
+  NUM_TRIALS_PER_TASK=50
+  WINDOW_SIZE=2
+  UNNORM_KEY=libero_spatial_no_noops
+  DEVICE=0
+EOF
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
 # Resolve script directory and repository root (two levels up)
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/../.." && pwd)"
@@ -28,6 +53,24 @@ video_out_path="results/${task_suite_name}/${folder_name}/${step_name}"
 
 # GPU device id (CUDA_VISIBLE_DEVICES)
 DEVICE=${DEVICE:-0}
+
+# Basic validations
+if [[ ! -d "${repo_root}/experiments/LIBERO" ]]; then
+  echo "ERROR: repo_root looks incorrect: ${repo_root}"
+  exit 1
+fi
+if [[ ! -d "${LIBERO_HOME}" ]]; then
+  echo "ERROR: LIBERO_HOME not found: ${LIBERO_HOME}"
+  exit 1
+fi
+if [[ ! -f "${your_ckpt}" ]]; then
+  echo "ERROR: checkpoint not found: ${your_ckpt}"
+  exit 1
+fi
+if [[ ! -d "${vlm_pretrained_path}" ]]; then
+  echo "ERROR: VLM_PRETRAINED_PATH not found: ${vlm_pretrained_path}"
+  exit 1
+fi
 
 # Run evaluation with the correct PYTHONPATH and GPU selection
 PYTHONPATH="${repo_root}:${repo_root}/src:${LIBERO_HOME}:${PYTHONPATH}" CUDA_VISIBLE_DEVICES=${DEVICE} python "${repo_root}/experiments/LIBERO/eval_libero.py" \

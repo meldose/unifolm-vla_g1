@@ -1,9 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+IFS=$'\n\t'
+
+usage() {
+  cat <<'EOF'
+Usage: run_libero_train.sh [ENV OVERRIDES]
+
+Common overrides:
+  VLM=/path/to/Unifolm-VLM-0
+  OXE=/path/to/data
+  DATA_MIX=libero_4_task_no_noops
+  RUN_ROOT_DIR=/path/to/runs
+  RUN_ID=exp_name
+  NUM_PROCESSES=8
+  DS_CONFIG=/path/to/deepspeed_zero2.yaml
+
+Notes:
+  - Requires: accelerate (HF), deepspeed config, valid data and model paths.
+EOF
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+command -v accelerate >/dev/null 2>&1 || { echo "ERROR: accelerate not found in PATH."; exit 1; }
+
 # NCCL settings for distributed training (adjust to your network)
-export NCCL_SOCKET_IFNAME=bond0
-export NCCL_IB_HCA=mlx5_2,mlx5_3
-export NCCL_BLOCKING_WAIT=1
-export NCCL_ASYNC_ERROR_HANDLING=1
-export NCCL_TIMEOUT=1000  
+export NCCL_SOCKET_IFNAME=${NCCL_SOCKET_IFNAME:-bond0}
+export NCCL_IB_HCA=${NCCL_IB_HCA:-mlx5_2,mlx5_3}
+export NCCL_BLOCKING_WAIT=${NCCL_BLOCKING_WAIT:-1}
+export NCCL_ASYNC_ERROR_HANDLING=${NCCL_ASYNC_ERROR_HANDLING:-1}
+export NCCL_TIMEOUT=${NCCL_TIMEOUT:-1000}
 
 
 # Model configuration
@@ -26,15 +55,41 @@ run_id=${RUN_ID:-your_run_id}
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/../.." && pwd)"
 
+# Basic validations
+if [[ ! -d "${repo_root}/src/unifolm_vla" ]]; then
+  echo "ERROR: repo_root looks incorrect: ${repo_root}"
+  exit 1
+fi
+if [[ ! -d "${base_vlm}" ]]; then
+  echo "ERROR: base_vlm not found: ${base_vlm}"
+  exit 1
+fi
+if [[ ! -d "${oxe_data_root}" ]]; then
+  echo "ERROR: oxe_data_root not found: ${oxe_data_root}"
+  exit 1
+fi
+if [[ -z "${run_root_dir}" || -z "${run_id}" ]]; then
+  echo "ERROR: RUN_ROOT_DIR and RUN_ID must be set."
+  exit 1
+fi
+
 # Create output folder and save a copy of this script for reproducibility
 output_dir=${run_root_dir}/${run_id}
 mkdir -p ${output_dir}
 cp $0 ${output_dir}/
 
 # Launch training with Hugging Face Accelerate + DeepSpeed
+ds_config=${DS_CONFIG:-${repo_root}/src/unifolm_vla/config/deepseeds/deepspeed_zero2.yaml}
+num_processes=${NUM_PROCESSES:-8}
+
+if [[ ! -f "${ds_config}" ]]; then
+  echo "ERROR: DeepSpeed config not found: ${ds_config}"
+  exit 1
+fi
+
 accelerate launch \
-  --config_file "${repo_root}/src/unifolm_vla/config/deepseeds/deepspeed_zero2.yaml" \
-  --num_processes 8 \
+  --config_file "${ds_config}" \
+  --num_processes "${num_processes}" \
   src/unifolm_vla/training/train_unifolm_vla.py \
   --config_yaml ./src/unifolm_vla/config/training/unifolm_vla_train.yaml \
   --framework.framework_py ${Framework_name} \
@@ -57,4 +112,3 @@ accelerate launch \
   --run_id ${run_id} \
   --wandb_project vla_jiang \
   --wandb_entity zbdz 
-
