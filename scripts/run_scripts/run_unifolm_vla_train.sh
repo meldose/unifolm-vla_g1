@@ -9,7 +9,10 @@ Usage: run_unifolm_vla_train.sh [ENV OVERRIDES]
 Common overrides:
   VLM=/path/to/Unifolm-VLM-0
   OXE=/path/to/data
+  TASK=pick_object|g1_stack_block|Unitree_all_task
   DATA_MIX=Unitree_all_task
+  WINDOW_SIZE=1
+  PER_DEVICE_BATCH_SIZE=6
   RUN_ROOT_DIR=/path/to/runs
   RUN_ID=exp_name
   NUM_PROCESSES=8
@@ -44,7 +47,21 @@ window_size=1
 # Dataset configuration
 # VLA dataset
 oxe_data_root=${OXE:-/path/to/your/data}
-data_mix=${DATA_MIX:-your_data_mix}   # Unitree_all_task  g1_stack_block
+# Task presets (override with DATA_MIX if provided)
+task=${TASK:-}
+if [[ -n "${task}" ]]; then
+  case "${task}" in
+    pick|pick_object|stack_block|g1_stack_block) data_mix_default="g1_stack_block" ;;
+    all|unitree_all|Unitree_all_task) data_mix_default="Unitree_all_task" ;;
+    g1_*) data_mix_default="${task}" ;;
+    *) data_mix_default="${task}" ;;
+  esac
+else
+  data_mix_default="your_data_mix"
+fi
+data_mix=${DATA_MIX:-${data_mix_default}}   # Unitree_all_task  g1_stack_block
+window_size=${WINDOW_SIZE:-1}
+per_device_batch_size=${PER_DEVICE_BATCH_SIZE:-6}
 
 # Run output path
 run_root_dir=${RUN_ROOT_DIR:-/path/to/your/run_root_dir}
@@ -98,7 +115,7 @@ accelerate launch \
   --datasets.vla_data.data_root_dir ${oxe_data_root} \
   --datasets.vla_data.data_mix ${data_mix} \
   --datasets.vla_data.window_size ${window_size} \
-  --datasets.vla_data.per_device_batch_size 6 \
+  --datasets.vla_data.per_device_batch_size ${per_device_batch_size} \
   --trainer.freeze_modules ${freeze_module_list} \
   --trainer.max_train_steps 150000 \
   --trainer.shuffle_buffer_size 10000 \
